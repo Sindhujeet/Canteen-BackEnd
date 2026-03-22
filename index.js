@@ -267,6 +267,38 @@ app.get('/api/order-detail/:id', async (req, res) => {
     }
 });
 
+//order status change api
+
+app.put('/api/order-update/:id', async (req, res) => {
+    try{
+        let order = await orderModel.findByIdAndUpdate(
+            req.params.id,
+            { paymentStatus: req.body.paymentStatus},
+            { new: true }
+        );
+
+        if (!order) {
+            return res.status(404).json({
+                status: 0,
+                message: "Order not found"
+            });
+        }
+
+        res.status(200).json({
+            status: 1,
+            message: "Order updated successfully",
+            data: order
+        });
+
+    } catch (err) {
+            res.status(500).json({
+                status: 0,
+                message: "Error updating order",
+                error: err.message
+            });
+        }
+    });
+
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URL).then(() => {
