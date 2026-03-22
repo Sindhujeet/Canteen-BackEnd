@@ -25,6 +25,10 @@ let itemSchema = new mongoose.Schema({
     image: {
         type: String,
         default: ""
+    },
+    category: {
+        type: String,
+        default: ""
     }
 
 });

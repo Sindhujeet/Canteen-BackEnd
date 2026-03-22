@@ -12,7 +12,7 @@ app.use(express.json());
 //post api
 app.post('/api/item-insert', async (req, res) => {
     try {
-        let { name, price, quantity, available , description, image} = req.body;
+        let { name, price, quantity, available , description, image, category} = req.body;
 
         if (!name || price === undefined) {
             return res.status(400).json({
@@ -34,7 +34,8 @@ app.post('/api/item-insert', async (req, res) => {
             quantity: quantity ?? 0,
             available: available ?? true,
             description: description ?? "", //
-            image: image ?? ""
+            image: image ?? "",
+            category,
         });
 
         await item.save();
@@ -118,7 +119,7 @@ app.delete("/api/item-delete/:id", async (req, res) => {
 app.put('/api/item-update/:id', async (req, res) => {
     try {
         let itemId = req.params.id;
-        let { name, price, quantity, available , description, image} = req.body;
+        let { name, price, quantity, available , description, image, category} = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(itemId)) {
             return res.status(400).json({
@@ -132,7 +133,8 @@ app.put('/api/item-update/:id', async (req, res) => {
         if (name !== undefined) updateData.name = name;
         if (description !== undefined) updateData.description = description; //
         if (quantity !== undefined) updateData.quantity=quantity;
-         if (image !== undefined) updateData.image = image;
+         if (image !== undefined) updateData.image = image; 
+         if (category !== undefined) updateData.category = category; //need to change it later after special menu is created 
    
         if (price !== undefined) {
             if (typeof price !== "number") {
