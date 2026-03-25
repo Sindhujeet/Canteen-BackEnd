@@ -44,6 +44,11 @@ let orderSchema = new mongoose.Schema({
     date: {
         type: Date,
         default: Date.now
+    },
+
+    tokenNo: {
+        type: Number,
+        default: 0,
     }
 
 });

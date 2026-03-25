@@ -192,15 +192,24 @@ app.post('/api/order-insert', async (req, res) => {
         let total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
         // Auto generate invoice number
-        let count = await orderModel.countDocuments();
         let invoiceNo = Date.now();
+
+        //Token no daily reset
+
+        let today = new Date();
+        today.setHours(0,0,0,0);
+        let todayOrdersCount = await orderModel.countDocuments({
+            date:{ $gte: today}
+    });
+    let tokenNo = todayOrdersCount + 1;
 
         let order = new orderModel({
             items,
             total,
             paymentMethod: paymentMethod || "cash",
             paymentStatus: "pending",
-            invoiceNo
+            invoiceNo,
+            tokenNo
         });
 
         await order.save();
