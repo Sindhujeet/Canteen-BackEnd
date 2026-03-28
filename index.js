@@ -308,6 +308,124 @@ app.put('/api/order-update/:id', async (req, res) => {
         }
     });
 
+    //sales page api
+    app.get('/api/sales', async (req, res) => {
+    try {
+        // Today
+        let today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Start of this month
+        let monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        // Start of this week (Monday)
+        let weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+        weekStart.setHours(0, 0, 0, 0);
+
+        // All orders
+        let allOrders = await orderModel.find();
+
+        // Today's orders
+        let todayOrders = allOrders.filter(o => new Date(o.date) >= today);
+
+        // This month's orders
+        let monthOrders = allOrders.filter(o => new Date(o.date) >= monthStart);
+
+        // This week's orders
+        let weekOrders = allOrders.filter(o => new Date(o.date) >= weekStart);
+
+        // Daily sales — last 7 days
+        let dailySales = [];
+        let dailyLabels = [];
+        for (let i = 6; i >= 0; i--) {
+            let day = new Date();
+            day.setDate(day.getDate() - i);
+            day.setHours(0, 0, 0, 0);
+            let nextDay = new Date(day);
+            nextDay.setDate(nextDay.getDate() + 1);
+
+            let dayOrders = allOrders.filter(o => {
+                let d = new Date(o.date);
+                return d >= day && d < nextDay;
+            });
+
+            let total = dayOrders.reduce((sum, o) => sum + o.total, 0);
+            dailySales.push(total);
+
+            let label = day.toLocaleDateString('en-IN', { weekday: 'short' });
+            dailyLabels.push(label);
+        }
+
+        // Monthly sales — last 6 months
+        let monthlySales = [];
+        let monthlyLabels = [];
+        for (let i = 5; i >= 0; i--) {
+            let d = new Date();
+            d.setMonth(d.getMonth() - i);
+            let y = d.getFullYear();
+            let m = d.getMonth();
+
+            let mOrders = allOrders.filter(o => {
+                let od = new Date(o.date);
+                return od.getFullYear() === y && od.getMonth() === m;
+            });
+
+            let total = mOrders.reduce((sum, o) => sum + o.total, 0);
+            monthlySales.push(total);
+
+            let label = d.toLocaleDateString('en-IN', { month: 'short' });
+            monthlyLabels.push(label);
+        }
+
+        // Category sales — from item names in orders
+        let categoryMap = {};
+        allOrders.forEach(order => {
+            order.items.forEach(item => {
+                if (!categoryMap[item.name]) categoryMap[item.name] = 0;
+                categoryMap[item.name] += item.price * item.quantity;
+            });
+        });
+
+        // Payment method breakdown
+        let cashOrders = allOrders.filter(o => o.paymentMethod === "cash");
+        let upiOrders = allOrders.filter(o => o.paymentMethod === "upi");
+
+        res.status(200).json({
+            status: 1,
+            message: "Sales data fetched successfully",
+            data: {
+                dailySales: todayOrders.reduce((sum, o) => sum + o.total, 0),
+                monthlySales: monthOrders.reduce((sum, o) => sum + o.total, 0),
+                dailyOrders: todayOrders.length,
+                weeklyOrders: weekOrders.length,
+                dailyChart: { labels: dailyLabels, data: dailySales },
+                monthlyChart: { labels: monthlyLabels, data: monthlySales },
+                categoryChart: {
+                    labels: Object.keys(categoryMap),
+                    data: Object.values(categoryMap)
+                },
+                paymentChart: {
+                    labels: ["Cash", "UPI"],
+                    data: [
+                        cashOrders.reduce((sum, o) => sum + o.total, 0),
+                        upiOrders.reduce((sum, o) => sum + o.total, 0)
+                    ]
+                }
+            }
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            status: 0,
+            message: "Error fetching sales data",
+            error: err.message
+        });
+    }
+});
+
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URL).then(() => {
