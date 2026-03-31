@@ -30,7 +30,6 @@ let itemSchema = new mongoose.Schema({
         type: String,
         default: ""
     }
-
 });
 
 let itemModel = mongoose.model('Item', itemSchema);

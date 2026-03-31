@@ -4,6 +4,11 @@ let orderSchema = new mongoose.Schema({
 
     items: [
         {
+            itemId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Item',
+                required: true
+            },
             name: {
                 type: String,
                 required: true

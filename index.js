@@ -178,6 +178,8 @@ app.put('/api/item-update/:id', async (req, res) => {
 //order apis
 // POST order
 app.post('/api/order-insert', async (req, res) => {
+
+     console.log("BODY RECEIVED:", req.body);
     try {
         let { items, paymentMethod } = req.body;
 
@@ -188,21 +190,62 @@ app.post('/api/order-insert', async (req, res) => {
             });
         }
 
-        // Calculate total automatically
-        let total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        // STEP 1: Update stock + validate
+        for (let i = 0; i < items.length; i++) {
 
-        // Auto generate invoice number
+            if (!items[i].itemId || items[i].quantity <= 0) {
+                return res.status(400).json({
+                    status: 0,
+                    message: "Invalid item data"
+                });
+            }
+
+            let updatedItem = await itemModel.findOneAndUpdate(
+                {
+                    _id: items[i].itemId,
+                    available: true,
+                    quantity: { $gte: items[i].quantity }
+                },
+                {
+                    $inc: { quantity: -items[i].quantity }
+                },
+                { new: true }
+            );
+
+            if (!updatedItem) {
+                return res.status(400).json({
+                    status: 0,
+                    message: `Item unavailable or out of stock`
+                });
+            }
+
+            // Auto-disable if stock finished
+            if (updatedItem.quantity === 0) {
+                await itemModel.updateOne(
+                    { _id: updatedItem._id },
+                    { available: false }
+                );
+            }
+        }
+
+        // STEP 2: Calculate total (using frontend values for now)
+        let total = items.reduce((sum, item) => {
+            return sum + item.price * item.quantity;
+        }, 0);
+
+        // STEP 3: Generate invoice + token
         let invoiceNo = Date.now();
 
-        //Token no daily reset
-
         let today = new Date();
-        today.setHours(0,0,0,0);
-        let todayOrdersCount = await orderModel.countDocuments({
-            date:{ $gte: today}
-    });
-    let tokenNo = todayOrdersCount + 1;
+        today.setHours(0, 0, 0, 0);
 
+        let todayOrdersCount = await orderModel.countDocuments({
+            date: { $gte: today }
+        });
+
+        let tokenNo = todayOrdersCount + 1;
+
+        // STEP 4: Save order
         let order = new orderModel({
             items,
             total,
@@ -226,6 +269,7 @@ app.post('/api/order-insert', async (req, res) => {
             message: "Error placing order",
             error: err.message
         });
+        console.log("BODY RECEIVED:", req.body);
     }
 });
 
