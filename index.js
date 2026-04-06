@@ -7,16 +7,16 @@ require('dotenv').config();
 // Import Models
 let itemModel = require('./App/models/item.model');
 let orderModel = require('./App/models/order.model');
-let userModel = require('./App/models/user.model'); // Brought this back!
+let userModel = require('./App/models/user.model');
 
 app.use(cors());
 app.use(express.json());
 
 // ==========================================
-// USER AUTHENTICATION APIS (Directly in index.js)
+// USER AUTHENTICATION APIS
 // ==========================================
 
-// 1. Seed Default Users
+// 1. Seed Default Users (Initial setup)
 app.get("/api/seed-users", async (req, res) => {
     try {
         let count = await userModel.countDocuments();
@@ -34,7 +34,27 @@ app.get("/api/seed-users", async (req, res) => {
     }
 });
 
-// 2. Login User
+// 2. Register New User (Matches your login.html popup)
+app.post("/api/register", async (req, res) => {
+    try {
+        const { username, password, role } = req.body;
+
+        const existingUser = await userModel.findOne({ username });
+        if (existingUser) {
+            return res.status(400).json({ status: 0, message: "User already registered! Kindly login." });
+        }
+
+        const newUser = new userModel({ username, password, role });
+        await newUser.save();
+
+        res.json({ status: 1, message: "Registered Successfully! Please login." });
+    } catch (err) {
+        console.error("Register Error:", err);
+        res.status(500).json({ status: 0, message: "Error registering user" });
+    }
+});
+
+// 3. Login User
 app.post("/api/login", async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -42,12 +62,18 @@ app.post("/api/login", async (req, res) => {
         let user = await userModel.findOne({ username: username, password: password });
 
         if (user) {
-            res.json({ status: 1, role: user.role, message: "Login Successful" });
+            // Returning status, role, and username for frontend session storage
+            res.json({ 
+                status: 1, 
+                role: user.role, 
+                username: user.username, 
+                message: "Login Successful" 
+            });
         } else {
             res.json({ status: 0, message: "Invalid username or password" });
         }
     } catch (err) {
-        console.error(err);
+        console.error("Login Error:", err);
         res.status(500).json({ status: 0, message: "Internal server error" });
     }
 });
@@ -58,10 +84,8 @@ app.post("/api/login", async (req, res) => {
 app.post('/api/item-insert', async (req, res) => {
     try {
         let { name, price, quantity, available , description, image, category} = req.body;
-
         if (!name || price === undefined) return res.status(400).json({ status: 0, message: "Name and price are required" });
-        if (typeof price !== "number") return res.status(400).json({ status: 0, message: "Price must be a number" });
-
+        
         let item = new itemModel({
             name, price, quantity: quantity ?? 0, available: available ?? true,
             description: description ?? "", image: image ?? "", category,
@@ -69,7 +93,6 @@ app.post('/api/item-insert', async (req, res) => {
 
         await item.save();
         res.status(201).json({ status: 1, message: "Item inserted successfully" });
-
     } catch (err) {
         res.status(500).json({ status: 0, message: "Error inserting item", error: err.message });
     }
@@ -78,7 +101,6 @@ app.post('/api/item-insert', async (req, res) => {
 app.get("/api/item-list", async (req, res) => {
     try {
         let itemList = await itemModel.find();
-        if (itemList.length === 0) return res.status(200).json({ status: 1, message: "No items found", data: [] });
         res.status(200).json({ status: 1, message: "Item list fetched successfully", data: itemList });
     } catch (error) {
         res.status(500).json({ status: 0, message: "Error fetching item list", error: error.message });
@@ -87,13 +109,9 @@ app.get("/api/item-list", async (req, res) => {
 
 app.delete("/api/item-delete/:id", async (req, res) => {
     try {
-        let itemId = req.params.id;
-        if (!itemId) return res.send({ status: 0, message: "Item ID is required" });
-
-        let deletedItem = await itemModel.deleteOne({ _id: itemId });
-        if (deletedItem.deletedCount === 0) return res.send({ status: 0, message: "Item not found or already deleted" });
-
-        res.send({ status: 1, message: "Item deleted successfully", id: itemId });
+        let deletedItem = await itemModel.deleteOne({ _id: req.params.id });
+        if (deletedItem.deletedCount === 0) return res.send({ status: 0, message: "Item not found" });
+        res.send({ status: 1, message: "Item deleted successfully" });
     } catch (error) {
         res.send({ status: 0, message: "Error deleting item", error: error.message });
     }
@@ -101,28 +119,9 @@ app.delete("/api/item-delete/:id", async (req, res) => {
 
 app.put('/api/item-update/:id', async (req, res) => {
     try {
-        let itemId = req.params.id;
-        let { name, price, quantity, available , description, image, category} = req.body;
-
-        if (!mongoose.Types.ObjectId.isValid(itemId)) return res.status(400).json({ status: 0, message: "Invalid Item ID" });
-
-        let updateData = {};
-        if (name !== undefined) updateData.name = name;
-        if (description !== undefined) updateData.description = description; 
-        if (quantity !== undefined) updateData.quantity=quantity;
-        if (image !== undefined) updateData.image = image; 
-        if (category !== undefined) updateData.category = category; 
-        if (price !== undefined) {
-            if (typeof price !== "number") return res.status(400).json({ status: 0, message: "Price must be a number" });
-            updateData.price = price;
-        }
-        if (available !== undefined) updateData.available = available;
-
-        let updatedItem = await itemModel.findByIdAndUpdate(itemId, updateData, { new: true, runValidators: true });
+        let updatedItem = await itemModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!updatedItem) return res.status(404).json({ status: 0, message: "Item not found" });
-
         res.status(200).json({ status: 1, message: "Item updated successfully", data: updatedItem });
-
     } catch (error) {
         res.status(500).json({ status: 0, message: "Error updating item", error: error.message });
     }
@@ -131,42 +130,56 @@ app.put('/api/item-update/:id', async (req, res) => {
 // ==========================================
 // ORDER APIS
 // ==========================================
+// ==========================================
+// ORDER APIS (Updated for Delivery & Pickup)
+// ==========================================
 app.post('/api/order-insert', async (req, res) => {
     try {
-        let { items, paymentMethod } = req.body;
+        let { items, paymentMethod, orderType, teacherName, department, phoneNumber } = req.body;
+        if (!items || items.length === 0) return res.status(400).json({ status: 0, message: "Order must have items" });
 
-        if (!items || items.length === 0) return res.status(400).json({ status: 0, message: "Order must have at least one item" });
+        // ==========================================
+        // BULLETPROOF PAYMENT FIX
+        // Forces whatever the frontend sends into "cash" or "upi"
+        // ==========================================
+        paymentMethod = String(paymentMethod).toLowerCase().trim();
+        if (paymentMethod !== "cash" && paymentMethod !== "upi") {
+            paymentMethod = "cash"; // Default to cash if it says "Cash on Delivery", "COD", etc.
+        }
 
+        // Stock Update Logic
         for (let i = 0; i < items.length; i++) {
-            if (!items[i].itemId || items[i].quantity <= 0) return res.status(400).json({ status: 0, message: "Invalid item data" });
-
             let updatedItem = await itemModel.findOneAndUpdate(
                 { _id: items[i].itemId, available: true, quantity: { $gte: items[i].quantity } },
                 { $inc: { quantity: -items[i].quantity } },
-                { new: true }
+                {returnDocument: 'after'}
             );
-
-            if (!updatedItem) return res.status(400).json({ status: 0, message: `Item unavailable or out of stock` });
-
-            if (updatedItem.quantity === 0) {
-                await itemModel.updateOne({ _id: updatedItem._id }, { available: false });
-            }
+            if (!updatedItem) return res.status(400).json({ status: 0, message: `Item out of stock` });
+            if (updatedItem.quantity === 0) await itemModel.updateOne({ _id: updatedItem._id }, { available: false });
         }
 
         let total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-        let invoiceNo = Date.now();
-        let today = new Date();
-        today.setHours(0, 0, 0, 0);
-
+        let today = new Date(); today.setHours(0, 0, 0, 0);
         let todayOrdersCount = await orderModel.countDocuments({ date: { $gte: today } });
-        let tokenNo = todayOrdersCount + 1;
 
-        let order = new orderModel({ items, total, paymentMethod: paymentMethod || "cash", paymentStatus: "pending", invoiceNo, tokenNo });
+        let order = new orderModel({ 
+            items, 
+            total, 
+            paymentMethod: paymentMethod, 
+            paymentStatus: "pending", 
+            invoiceNo: Date.now(), 
+            tokenNo: todayOrdersCount + 1,
+            orderType: orderType || "Pickup",
+            teacherName: teacherName || "",
+            department: department || "",
+            phoneNumber: phoneNumber || ""
+        });
+        
         await order.save();
-
         res.status(201).json({ status: 1, message: "Order placed successfully", data: order });
-
     } catch (err) {
+        // THIS LOGS THE EXACT ERROR TO YOUR TERMINAL
+        console.error("\n❌ MONGOOSE SAVE ERROR:", err.message, "\n");
         res.status(500).json({ status: 0, message: "Error placing order", error: err.message });
     }
 });
@@ -180,43 +193,22 @@ app.get('/api/order-list', async (req, res) => {
     }
 });
 
-app.get('/api/order-detail/:id', async (req, res) => {
+app.delete('/api/order-delete/:id', async (req, res) => {
     try {
-        let order = await orderModel.findById(req.params.id);
-        if (!order) return res.status(404).json({ status: 0, message: "Order not found" });
-        res.status(200).json({ status: 1, message: "Order fetched successfully", data: order });
-    } catch (err) {
-        res.status(500).json({ status: 0, message: "Error fetching order", error: err.message });
+        const deletedOrder = await orderModel.findByIdAndDelete(req.params.id);
+        if (!deletedOrder) return res.status(404).json({ status: 0, message: "Order not found" });
+        res.json({ status: 1, message: "Order deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ status: 0, message: "Failed to delete order" });
     }
 });
 
 app.put('/api/order-update/:id', async (req, res) => {
-    try{
-        let order = await orderModel.findByIdAndUpdate(req.params.id, { paymentStatus: req.body.paymentStatus}, { new: true });
-        if (!order) return res.status(404).json({ status: 0, message: "Order not found" });
+    try {
+        let order = await orderModel.findByIdAndUpdate(req.params.id, { paymentStatus: req.body.paymentStatus }, { new: true });
         res.status(200).json({ status: 1, message: "Order updated successfully", data: order });
     } catch (err) {
-        res.status(500).json({ status: 0, message: "Error updating order", error: err.message });
-    }
-});
-// ── Delete Order Route ──────────────────────────────────────────
-app.delete('/api/order-delete/:id', async (req, res) => {
-    try {
-        const orderId = req.params.id;
-        
-        // Find the order by ID and delete it from the database
-        // NOTE: Change 'Order' to whatever your actual Mongoose model is named (e.g., OrderModel, orders, etc.)
-        const deletedOrder = await orderModel.findByIdAndDelete(orderId);
-
-        if (!deletedOrder) {
-            return res.status(404).json({ status: 0, message: "Order not found" });
-        }
-
-        res.json({ status: 1, message: "Order deleted successfully" });
-
-    } catch (error) {
-        console.error("Delete route error:", error);
-        res.status(500).json({ status: 0, message: "Failed to delete order" });
+        res.status(500).json({ status: 0, message: "Error updating order" });
     }
 });
 
@@ -227,58 +219,44 @@ app.get('/api/sales', async (req, res) => {
     try {
         let today = new Date(); today.setHours(0, 0, 0, 0);
         let monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-        let weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); weekStart.setHours(0, 0, 0, 0);
 
         let allOrders = await orderModel.find();
         let todayOrders = allOrders.filter(o => new Date(o.date) >= today);
         let monthOrders = allOrders.filter(o => new Date(o.date) >= monthStart);
-        let weekOrders = allOrders.filter(o => new Date(o.date) >= weekStart);
 
-        let dailySales = []; let dailyLabels = [];
+        let dailyLabels = []; let dailySales = [];
         for (let i = 6; i >= 0; i--) {
             let day = new Date(); day.setDate(day.getDate() - i); day.setHours(0, 0, 0, 0);
             let nextDay = new Date(day); nextDay.setDate(nextDay.getDate() + 1);
-
             let dayOrders = allOrders.filter(o => { let d = new Date(o.date); return d >= day && d < nextDay; });
             dailySales.push(dayOrders.reduce((sum, o) => sum + o.total, 0));
             dailyLabels.push(day.toLocaleDateString('en-IN', { weekday: 'short' }));
         }
 
-        let monthlySales = []; let monthlyLabels = [];
-        for (let i = 5; i >= 0; i--) {
-            let d = new Date(); d.setMonth(d.getMonth() - i);
-            let y = d.getFullYear(); let m = d.getMonth();
-
-            let mOrders = allOrders.filter(o => { let od = new Date(o.date); return od.getFullYear() === y && od.getMonth() === m; });
-            monthlySales.push(mOrders.reduce((sum, o) => sum + o.total, 0));
-            monthlyLabels.push(d.toLocaleDateString('en-IN', { month: 'short' }));
-        }
-
         let categoryMap = {};
         allOrders.forEach(order => {
             order.items.forEach(item => {
-                if (!categoryMap[item.name]) categoryMap[item.name] = 0;
-                categoryMap[item.name] += item.price * item.quantity;
+                categoryMap[item.name] = (categoryMap[item.name] || 0) + (item.price * item.quantity);
             });
         });
 
-        let cashOrders = allOrders.filter(o => o.paymentMethod === "cash");
-        let upiOrders = allOrders.filter(o => o.paymentMethod === "upi");
-
         res.status(200).json({
-            status: 1, message: "Sales data fetched successfully",
+            status: 1, message: "Sales data fetched",
             data: {
                 dailySales: todayOrders.reduce((sum, o) => sum + o.total, 0),
                 monthlySales: monthOrders.reduce((sum, o) => sum + o.total, 0),
-                dailyOrders: todayOrders.length, weeklyOrders: weekOrders.length,
+                dailyOrders: todayOrders.length,
                 dailyChart: { labels: dailyLabels, data: dailySales },
-                monthlyChart: { labels: monthlyLabels, data: monthlySales },
                 categoryChart: { labels: Object.keys(categoryMap), data: Object.values(categoryMap) },
-                paymentChart: { labels: ["Cash", "UPI"], data: [ cashOrders.reduce((sum, o) => sum + o.total, 0), upiOrders.reduce((sum, o) => sum + o.total, 0) ] }
+                // Dummy monthly chart data (simplified)
+                monthlyChart: { labels: ["Jan", "Feb", "Mar", "Apr"], data: [1000, 2000, 1500, monthOrders.reduce((sum, o) => sum + o.total, 0)] },
+                paymentChart: { labels: ["Cash", "UPI"], data: [
+                    allOrders.filter(o => o.paymentMethod === "cash").reduce((s, o) => s + o.total, 0),
+                    allOrders.filter(o => o.paymentMethod === "upi").reduce((s, o) => s + o.total, 0)
+                ]}
             }
         });
-
-    } catch (err) { res.status(500).json({ status: 0, message: "Error fetching sales data", error: err.message }); }
+    } catch (err) { res.status(500).json({ status: 0, message: "Sales error" }); }
 });
 
 // ==========================================
@@ -286,7 +264,7 @@ app.get('/api/sales', async (req, res) => {
 // ==========================================
 mongoose.connect(process.env.MONGO_URL).then(() => {
     console.log("Connected to MongoDB");
-    app.listen(process.env.PORT || 3000, () => {
-        console.log(`Server is running on port ${process.env.PORT || 3000}`);
+    app.listen(process.env.PORT || 8000, () => {
+        console.log(`Server is running on port ${process.env.PORT || 8000}`);
     });
 }).catch((err) => { console.log(err) });

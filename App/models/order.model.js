@@ -54,7 +54,29 @@ let orderSchema = new mongoose.Schema({
     tokenNo: {
         type: Number,
         default: 0,
-    }
+    },
+
+    //for teacher delivery
+
+    orderType: {
+        type: String,
+        default: "pickup"
+    },
+
+    teacherName: {
+        type: String,
+        default:""
+    },
+
+    department: {
+        type: String,
+        default:""
+    },
+
+    phoneNumber: {
+        type: String,
+        default:""
+    },
 
 });
 
